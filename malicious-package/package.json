@@ -1,0 +1,18 @@
+{
+  "name": "evil-package",
+  "version": "1.0.0",
+  "description": "Security demo package",
+  "main": "index.js",
+  "scripts": {
+    "postinstall": "node index.js"
+  },
+  "keywords": [
+    "logger",
+    "demo"
+  ],
+  "author": "Security Training",
+  "license": "MIT",
+  "dependencies": {
+    "evil-paidy-package": "^1.0.0"
+  }
+}
